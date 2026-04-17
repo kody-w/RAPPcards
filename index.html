@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RAPPcards — Digital twin of the RAR card collection</title>
+<meta name="description" content="A living digital twin of the RAPP Agent Registry (RAR) card collection. 138 single-file AI agents rendered as MTG-style cards, pulled live from kody-w/RAR.">
+<meta name="theme-color" content="#0a0a0f">
+<meta property="og:title" content="RAPPcards — RAR Card Twin">
+<meta property="og:description" content="138 single-file AI agents, Pokémon-card style. Pulled live from kody-w/RAR.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#08080c; --bg2:#0f0f18; --panel:#12121c;
+    --fg:#e8e8f0; --dim:#9898a8; --faint:#5a5a70;
+    --line:#26263a; --accent:#7df0c8;
+    --R:#f47067; --W:#f0e4a8; --U:#58a6ff; --B:#bc8cff; --G:#7fd88f; --N:#bbbbcc;
+    --c-common:#c0c0d0; --c-uncommon:#8ab7d9; --c-rare:#e6c66a; --c-mythic:#ff8a4c;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif;
+    -webkit-font-smoothing:antialiased;min-height:100vh}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .mono{font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace}
+
+  /* HEADER */
+  header{position:sticky;top:0;z-index:50;background:rgba(8,8,12,.92);
+    backdrop-filter:saturate(160%) blur(12px);-webkit-backdrop-filter:saturate(160%) blur(12px);
+    border-bottom:1px solid var(--line)}
+  .hrow{max-width:1600px;margin:0 auto;padding:14px 20px;
+    display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  .brand{font-weight:700;font-size:18px;letter-spacing:-.02em}
+  .brand .grad{background:linear-gradient(90deg,#7df0c8,#58a6ff,#bc8cff);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .hlinks{display:flex;gap:16px;margin-left:auto;flex-wrap:wrap;font-size:13px}
+  .hlinks a{color:var(--dim)}
+  .hlinks a:hover{color:var(--fg)}
+
+  /* HERO */
+  .hero{max-width:1200px;margin:40px auto 24px;padding:0 20px;text-align:center}
+  .hero h1{margin:0;font-size:clamp(32px,5vw,56px);letter-spacing:-.02em;line-height:1.05}
+  .hero h1 .grad{background:linear-gradient(90deg,#7df0c8,#58a6ff,#bc8cff);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{margin:14px auto 0;color:var(--dim);max-width:720px;font-size:16px;line-height:1.55}
+  .stats{margin:22px 0 0;display:flex;justify-content:center;gap:22px;flex-wrap:wrap;
+    color:var(--faint);font-size:13px;font-family:'SF Mono',ui-monospace,monospace}
+  .stats strong{color:var(--fg);font-weight:600}
+
+  /* CONTROLS */
+  .controls{max-width:1600px;margin:20px auto 0;padding:0 20px;
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .controls input, .controls select{
+    background:var(--panel);color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;
+    padding:9px 12px;font:inherit;font-size:13px;outline:none;
+    transition:border .15s}
+  .controls input:focus, .controls select:focus{border-color:var(--accent)}
+  .controls input[type=search]{flex:1;min-width:220px}
+  .controls .count{margin-left:auto;color:var(--dim);font-size:13px}
+  .pill-row{display:flex;gap:6px;flex-wrap:wrap}
+  .pill{padding:5px 11px;font-size:12px;border:1px solid var(--line);
+    border-radius:999px;cursor:pointer;user-select:none;background:var(--panel);
+    color:var(--dim);transition:.15s}
+  .pill:hover{color:var(--fg);border-color:var(--faint)}
+  .pill.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .pill[data-color=R].active{background:var(--R);border-color:var(--R)}
+  .pill[data-color=W].active{background:var(--W);border-color:var(--W);color:#222}
+  .pill[data-color=U].active{background:var(--U);border-color:var(--U)}
+  .pill[data-color=B].active{background:var(--B);border-color:var(--B)}
+  .pill[data-color=G].active{background:var(--G);border-color:var(--G);color:#0a0a0a}
+  .pill[data-color=N].active{background:var(--N);border-color:var(--N);color:#0a0a0a}
+
+  /* GRID */
+  .grid{max-width:1600px;margin:28px auto 60px;padding:0 20px;
+    display:grid;gap:18px;
+    grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .loading{grid-column:1/-1;padding:80px 0;text-align:center;color:var(--dim)}
+  .empty{grid-column:1/-1;padding:60px 0;text-align:center;color:var(--faint)}
+
+  /* CARD */
+  .card{
+    position:relative;aspect-ratio:2.5/3.5;border-radius:14px;
+    border:1px solid var(--line);overflow:hidden;cursor:pointer;
+    background:linear-gradient(145deg,#151520,#0a0a12);
+    padding:10px;display:flex;flex-direction:column;gap:6px;
+    transition:transform .18s ease, border-color .18s, box-shadow .18s;
+    will-change:transform}
+  .card:hover{transform:translateY(-3px) scale(1.015);border-color:var(--faint);
+    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .card[data-rarity=mythic]{border-color:rgba(255,138,76,.45)}
+  .card[data-rarity=rare]{border-color:rgba(230,198,106,.35)}
+  .card[data-rarity=uncommon]{border-color:rgba(138,183,217,.28)}
+
+  .card::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.06), transparent 50%),
+      radial-gradient(100% 60% at 100% 100%, rgba(125,240,200,.04), transparent 55%);
+    z-index:0}
+  .card[data-rarity=mythic]::before{
+    background:
+      radial-gradient(140% 100% at 0% 0%, rgba(255,138,76,.18), transparent 50%),
+      radial-gradient(100% 80% at 100% 100%, rgba(255,200,80,.08), transparent 55%)}
+  .card[data-rarity=rare]::before{
+    background:
+      radial-gradient(130% 90% at 0% 0%, rgba(230,198,106,.12), transparent 50%),
+      radial-gradient(100% 70% at 100% 100%, rgba(230,198,106,.05), transparent 55%)}
+
+  .cardHead{display:flex;justify-content:space-between;align-items:flex-start;
+    gap:6px;position:relative;z-index:1}
+  .cardName{font-size:13px;font-weight:700;line-height:1.15;
+    letter-spacing:-.01em;color:var(--fg);
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
+    -webkit-box-orient:vertical;word-break:break-word}
+  .mana{display:flex;gap:2px;flex-shrink:0}
+  .pip{width:16px;height:16px;border-radius:50%;font-size:10px;
+    display:grid;place-items:center;font-weight:700;color:#111;
+    box-shadow:inset 0 -2px 3px rgba(0,0,0,.2)}
+  .pip[data-c=R]{background:var(--R)} .pip[data-c=W]{background:var(--W)}
+  .pip[data-c=U]{background:var(--U)} .pip[data-c=B]{background:var(--B);color:#eee}
+  .pip[data-c=G]{background:var(--G)} .pip[data-c=N]{background:var(--N)}
+  .pip[data-c="#"]{background:#d0d0d8;color:#111}
+
+  .cardArt{position:relative;z-index:1;aspect-ratio:1;border-radius:8px;
+    overflow:hidden;background:#000;border:1px solid #1a1a26}
+  .cardArt svg{width:100%;height:100%;display:block}
+
+  .cardType{position:relative;z-index:1;font-size:10.5px;color:var(--dim);
+    line-height:1.2;padding:3px 0 0;
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;
+    -webkit-box-orient:vertical;word-break:break-word}
+
+  .cardBody{position:relative;z-index:1;font-size:10.5px;color:var(--dim);
+    line-height:1.35;flex:1;overflow:hidden;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+  .cardBody b{color:var(--fg);font-weight:600}
+
+  .cardFoot{position:relative;z-index:1;display:flex;
+    justify-content:space-between;align-items:center;gap:4px;
+    padding-top:4px;border-top:1px solid rgba(255,255,255,.05);
+    font-size:10px;color:var(--faint)}
+  .rarity{padding:2px 6px;border-radius:999px;font-size:9px;
+    text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+  .rarity[data-r=common]{background:#2a2a38;color:var(--c-common)}
+  .rarity[data-r=uncommon]{background:rgba(138,183,217,.12);color:var(--c-uncommon)}
+  .rarity[data-r=rare]{background:rgba(230,198,106,.12);color:var(--c-rare)}
+  .rarity[data-r=mythic]{background:rgba(255,138,76,.12);color:var(--c-mythic)}
+  .pt{font-family:'SF Mono',ui-monospace,monospace;color:var(--fg);font-weight:700;font-size:11px}
+
+  /* MODAL */
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);
+    display:none;z-index:100;align-items:center;justify-content:center;
+    padding:20px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--bg2);border:1px solid var(--line);border-radius:16px;
+    max-width:460px;width:100%;max-height:90vh;overflow-y:auto;
+    padding:24px;position:relative}
+  .modal h2{margin:0 0 4px;font-size:22px}
+  .modal .title{color:var(--dim);font-size:13px;margin:0 0 10px;font-style:italic}
+  .modal .close{position:absolute;top:14px;right:14px;width:32px;height:32px;
+    background:transparent;border:1px solid var(--line);border-radius:50%;
+    color:var(--fg);cursor:pointer;font-size:18px;line-height:1}
+  .modal .close:hover{border-color:var(--fg)}
+  .modal .art{margin:14px 0;border-radius:12px;overflow:hidden;background:#000;
+    border:1px solid var(--line);aspect-ratio:1}
+  .modal .art svg{width:100%;height:100%}
+  .modal .typeline{font-size:13px;color:var(--accent);margin:8px 0}
+  .modal .abilities{margin:10px 0;padding:0;list-style:none}
+  .modal .abilities li{padding:8px 10px;background:var(--panel);border-radius:8px;
+    margin:6px 0;font-size:13px;line-height:1.45}
+  .modal .abilities b{color:var(--accent)}
+  .modal .flavor{margin:14px 0 4px;padding:12px;border-left:2px solid var(--accent);
+    background:var(--panel);border-radius:0 8px 8px 0;font-style:italic;
+    color:var(--dim);font-size:13px;line-height:1.5}
+  .modal .stats-row{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 0;
+    padding-top:14px;border-top:1px solid var(--line);
+    font-family:'SF Mono',ui-monospace,monospace;font-size:11px;color:var(--dim)}
+  .modal .stats-row span b{color:var(--fg);font-weight:600}
+  .modal .seed{word-break:break-all;color:var(--accent)}
+  .modal .incant{margin:10px 0;padding:10px;background:#05050a;border-radius:8px;
+    border:1px solid var(--line);font-family:'SF Mono',ui-monospace,monospace;
+    font-size:11px;color:var(--accent);letter-spacing:.1em}
+  .modal .links{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+  .modal .links a{padding:8px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:12px;color:var(--fg);background:var(--panel)}
+  .modal .links a:hover{border-color:var(--accent);text-decoration:none}
+
+  footer{max-width:1600px;margin:40px auto 24px;padding:20px;border-top:1px solid var(--line);
+    display:flex;gap:18px;flex-wrap:wrap;align-items:center;color:var(--faint);font-size:12px}
+  footer strong{color:var(--fg)}
+  footer .spacer{flex:1}
+
+  @media (max-width:500px){
+    .grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+    .cardName{font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div class="brand"><span class="grad">RAPPcards</span></div>
+    <span style="color:var(--faint);font-size:12px">digital twin of the RAR card collection</span>
+    <nav class="hlinks">
+      <a href="https://kody-w.github.io/RAR" target="_blank" rel="noopener">RAR ↗</a>
+      <a href="https://kody-w.github.io/RAR/binder.html" target="_blank" rel="noopener">Binder ↗</a>
+      <a href="https://kody-w.com" target="_blank" rel="noopener">RAPP Stack ↗</a>
+      <a href="https://github.com/kody-w/RAPPcards" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <h1>The <span class="grad">RAPPcards</span></h1>
+  <p>
+    A living digital twin of the <a href="https://kody-w.github.io/RAR" target="_blank" rel="noopener">RAPP Agent Registry</a>.
+    Every card is a <strong style="color:var(--fg)">single-file AI agent</strong>.
+    Every agent has a card, a seed, and a 7-word incantation.
+    Data fetched live from <a href="https://github.com/kody-w/RAR" target="_blank" rel="noopener">kody-w/RAR</a> on every page load.
+  </p>
+  <div class="stats" id="statsRow">
+    <span>↑ loading…</span>
+  </div>
+</section>
+
+<div class="controls">
+  <input type="search" id="q" placeholder="Search cards, abilities, publishers, flavor…" autocomplete="off">
+  <select id="rarity">
+    <option value="">All rarities</option>
+    <option value="common">Common</option>
+    <option value="uncommon">Uncommon</option>
+    <option value="rare">Rare</option>
+    <option value="mythic">Mythic</option>
+  </select>
+  <select id="category">
+    <option value="">All categories</option>
+  </select>
+  <select id="publisher">
+    <option value="">All publishers</option>
+  </select>
+  <div class="pill-row" id="colorPills">
+    <span class="pill" data-color="R">R</span>
+    <span class="pill" data-color="W">W</span>
+    <span class="pill" data-color="U">U</span>
+    <span class="pill" data-color="B">B</span>
+    <span class="pill" data-color="G">G</span>
+    <span class="pill" data-color="N">N</span>
+  </div>
+  <span class="count" id="count"></span>
+</div>
+
+<div class="grid" id="grid">
+  <div class="loading">Loading 138 cards from RAR…</div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+
+<footer>
+  <div><strong>RAPPcards</strong> — digital twin of <a href="https://kody-w.github.io/RAR" target="_blank" rel="noopener">RAR</a>.
+    Data pulled live from <span class="mono">raw.githubusercontent.com/kody-w/RAR/main/</span>.</div>
+  <span class="spacer"></span>
+  <div>
+    <a href="https://kody-w.github.io/RAPP/SPEC.md" target="_blank" rel="noopener">v1 SPEC</a> ·
+    <a href="https://github.com/kody-w" target="_blank" rel="noopener">@kody-w</a>
+  </div>
+</footer>
+
+<script>
+/* RAPPcards — static single-file twin, data live from RAR */
+const CARDS_URL   = 'https://raw.githubusercontent.com/kody-w/RAR/main/cards/holo_cards.json';
+const REGISTRY_URL= 'https://raw.githubusercontent.com/kody-w/RAR/main/registry.json';
+
+const state = {
+  cards: [],            // array of { id, card, meta }
+  q: '',
+  rarity: '',
+  category: '',
+  publisher: '',
+  colors: new Set(),
+};
+
+const $ = s => document.querySelector(s);
+const esc = s => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* Sanitize avatar SVG — only allow inline SVG markup we expect from RAR */
+function safeSVG(svg){
+  if (!svg || typeof svg !== 'string') return '';
+  // strip script/event handlers defensively
+  return svg.replace(/<script[\s\S]*?<\/script>/gi,'')
+            .replace(/on[a-z]+\s*=\s*"[^"]*"/gi,'')
+            .replace(/on[a-z]+\s*=\s*'[^']*'/gi,'');
+}
+
+/* Parse mana cost like "{3}{R}{W}" → [{text:'3',c:'#'},{c:'R'},{c:'W'}] */
+function parseMana(s){
+  if (!s) return [];
+  const out = [];
+  const re = /\{([^}]+)\}/g; let m;
+  while ((m = re.exec(s))) {
+    const t = m[1];
+    if (/^[0-9]+$/.test(t)) out.push({text:t,c:'#'});
+    else out.push({text:t,c:t});
+  }
+  return out;
+}
+
+/* 7-word incantation from 64-bit seed (client-side reproduction of RAR's scheme).
+   RAR's canonical mapping is in cards/incantation.json; we derive a stable
+   7-token label from the seed for display — labelled 'seed fingerprint' to make
+   clear this is derived, not authoritative. The true incantation lives in RAR. */
+function seedFingerprint(seed){
+  if (seed === undefined || seed === null) return '—';
+  const s = String(seed);
+  // hash → pick 7 words from a wordlist derived from seed digits
+  const W = ['TWIST','MOLD','BEQUEST','VALOR','LEFT','ORBIT','RUNE','AXIS','PULSE',
+    'SHARD','QUILL','ECHO','RELIC','GLEAM','DRIFT','CLASP','VEIN','HAZE','PRISM',
+    'CINDER','BLOOM','WISP','TOME','FORGE','GHOST','CRAG','BIND','LOOM','FROST',
+    'SONAR','HALO','VAULT','COIL','FABLE','DUSK','PYRE'];
+  const words = [];
+  let h = 0n; try { h = BigInt(s); } catch { h = 0n; }
+  for (let i=0;i<7;i++){ words.push(W[Number(h % BigInt(W.length))]); h = h / BigInt(W.length) + BigInt(i)*31n; }
+  return words.join(' ');
+}
+
+async function load(){
+  try {
+    const [cardsRes, regRes] = await Promise.all([
+      fetch(CARDS_URL),
+      fetch(REGISTRY_URL),
+    ]);
+    const cards = await cardsRes.json();
+    const reg = await regRes.json();
+    const agents = reg.agents || {};
+    const agentMap = {};
+    if (Array.isArray(agents)) agents.forEach(a => agentMap[a.name] = a);
+    else Object.assign(agentMap, agents);
+
+    state.cards = Object.entries(cards).map(([id, card]) => ({
+      id, card, meta: agentMap[id] || {}
+    }));
+
+    // Build filter dropdowns
+    const cats = new Set(), pubs = new Set();
+    state.cards.forEach(({meta, id}) => {
+      if (meta.category) cats.add(meta.category);
+      const pub = id.split('/')[0];
+      if (pub) pubs.add(pub);
+    });
+    fillSelect('category', [...cats].sort());
+    fillSelect('publisher', [...pubs].sort());
+
+    updateStats(reg);
+    render();
+  } catch (e) {
+    $('#grid').innerHTML = `<div class="empty">Failed to load: ${esc(String(e))}<br>
+      The twin fetches live from <span class="mono">kody-w/RAR</span> — check your connection.</div>`;
+  }
+}
+
+function fillSelect(id, opts){
+  const sel = $('#'+id);
+  opts.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    sel.appendChild(opt);
+  });
+}
+
+function updateStats(reg){
+  const s = reg.stats || {};
+  $('#statsRow').innerHTML = [
+    `<span><strong>${s.total_agents || state.cards.length}</strong> cards</span>`,
+    `<span><strong>${s.publishers || '—'}</strong> publishers</span>`,
+    `<span><strong>${s.categories || '—'}</strong> categories</span>`,
+    `<span>schema <strong>${(state.cards[0]?.meta?.schema)||'rapp-agent/1.0'}</strong></span>`,
+    `<span>generated <strong>${(reg.generated_at||'').slice(0,10)}</strong></span>`,
+  ].join('');
+}
+
+function passFilter({id, card, meta}){
+  if (state.rarity && card.rarity !== state.rarity) return false;
+  if (state.category && meta.category !== state.category) return false;
+  if (state.publisher && !id.startsWith(state.publisher+'/')) return false;
+  if (state.colors.size){
+    const cs = new Set(card.colors || []);
+    if (![...state.colors].some(c => cs.has(c))) return false;
+  }
+  if (state.q){
+    const hay = [
+      id, card.name, card.title, card.type_line, card.flavor_text,
+      meta.description, (meta.tags||[]).join(' '),
+      (card.abilities||[]).map(a=>a.keyword+' '+a.text).join(' ')
+    ].join(' ').toLowerCase();
+    if (!hay.includes(state.q)) return false;
+  }
+  return true;
+}
+
+const rarityOrder = { mythic:0, rare:1, uncommon:2, common:3 };
+
+function render(){
+  const filtered = state.cards.filter(passFilter)
+    .sort((a,b) => (rarityOrder[a.card.rarity]??9) - (rarityOrder[b.card.rarity]??9)
+                  || a.card.name.localeCompare(b.card.name));
+  $('#count').textContent = `${filtered.length} / ${state.cards.length}`;
+  if (!filtered.length){
+    $('#grid').innerHTML = '<div class="empty">No cards match your filters.</div>';
+    return;
+  }
+  $('#grid').innerHTML = filtered.map(cardHTML).join('');
+  [...document.querySelectorAll('.card')].forEach(el => {
+    el.addEventListener('click', () => openModal(el.dataset.id));
+  });
+}
+
+function cardHTML({id, card, meta}){
+  const mana = parseMana(card.mana_cost).map(p =>
+    `<span class="pip" data-c="${esc(p.c)}">${esc(p.text||p.c)}</span>`).join('');
+  const ability1 = (card.abilities && card.abilities[0]) || {};
+  return `<article class="card" data-rarity="${esc(card.rarity||'common')}" data-id="${esc(id)}">
+    <div class="cardHead">
+      <div class="cardName">${esc(card.name||id)}</div>
+      <div class="mana">${mana}</div>
+    </div>
+    <div class="cardArt">${safeSVG(card.avatar_svg)}</div>
+    <div class="cardType">${esc(card.type_line||'')}</div>
+    <div class="cardBody">${ability1.keyword ? `<b>${esc(ability1.keyword)}</b> — ` : ''}${esc(ability1.text || meta.description || '')}</div>
+    <div class="cardFoot">
+      <span class="rarity" data-r="${esc(card.rarity||'common')}">${esc(card.rarity||'common')}</span>
+      <span class="pt">${esc(card.power??'')}/${esc(card.toughness??'')}</span>
+    </div>
+  </article>`;
+}
+
+function openModal(id){
+  const c = state.cards.find(x => x.id === id);
+  if (!c) return;
+  const {card, meta} = c;
+  const mana = parseMana(card.mana_cost).map(p =>
+    `<span class="pip" data-c="${esc(p.c)}">${esc(p.text||p.c)}</span>`).join('');
+  const abilities = (card.abilities||[]).map(a =>
+    `<li><b>${esc(a.keyword||'')}</b>${a.cost?` ${esc(a.cost)}`:''} — ${esc(a.text||'')}</li>`
+  ).join('');
+  const seed = meta._seed;
+  const fileURL = meta._file
+    ? `https://github.com/kody-w/RAR/blob/main/${meta._file}`
+    : `https://github.com/kody-w/RAR/tree/main/agents/${id.split('/')[0]}`;
+  const rawURL = meta._file
+    ? `https://raw.githubusercontent.com/kody-w/RAR/main/${meta._file}`
+    : '';
+
+  $('#modal').innerHTML = `
+    <button class="close" aria-label="Close">×</button>
+    <h2>${esc(card.name||id)}</h2>
+    <div class="title">${esc(card.title||'')} ${mana}</div>
+    <div class="art">${safeSVG(card.avatar_svg)}</div>
+    <div class="typeline">${esc(card.type_line||'')}</div>
+    <ul class="abilities">${abilities}</ul>
+    ${card.flavor_text ? `<div class="flavor">${esc(card.flavor_text)}</div>` : ''}
+    <div class="incant" title="Seed fingerprint — 7-word visualization of the card's 64-bit seed. Authoritative incantation lives in RAR.">
+      🔮 ${esc(seedFingerprint(seed))}
+    </div>
+    <div class="stats-row">
+      <span><b>Rarity</b> ${esc(card.rarity||'')}</span>
+      <span><b>P/T</b> ${esc(card.power??'')}/${esc(card.toughness??'')}</span>
+      <span><b>Category</b> ${esc(meta.category||'—')}</span>
+      <span><b>Tier</b> ${esc(meta.quality_tier||'—')}</span>
+      <span><b>Version</b> ${esc(meta.version||'—')}</span>
+      <span><b>Lines</b> ${esc(meta._lines??'—')}</span>
+    </div>
+    <div class="stats-row"><span class="seed"><b>seed</b> ${esc(seed??'—')}</span></div>
+    <div class="stats-row"><span><b>id</b> ${esc(id)}</span></div>
+    <div class="links">
+      <a href="${fileURL}" target="_blank" rel="noopener">View source on GitHub ↗</a>
+      ${rawURL ? `<a href="${rawURL}" target="_blank" rel="noopener">Raw .py ↗</a>` : ''}
+      <a href="https://kody-w.github.io/RAR/binder.html#${esc(id)}" target="_blank" rel="noopener">Open in Binder ↗</a>
+    </div>`;
+  $('#modalBg').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  $('#modal .close').addEventListener('click', closeModal);
+}
+function closeModal(){
+  $('#modalBg').classList.remove('open');
+  document.body.style.overflow = '';
+}
+$('#modalBg').addEventListener('click', e => {
+  if (e.target === $('#modalBg')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+
+$('#q').addEventListener('input', e => { state.q = e.target.value.trim().toLowerCase(); render(); });
+$('#rarity').addEventListener('change', e => { state.rarity = e.target.value; render(); });
+$('#category').addEventListener('change', e => { state.category = e.target.value; render(); });
+$('#publisher').addEventListener('change', e => { state.publisher = e.target.value; render(); });
+$('#colorPills').addEventListener('click', e => {
+  const p = e.target.closest('.pill'); if (!p) return;
+  const c = p.dataset.color;
+  if (state.colors.has(c)) { state.colors.delete(c); p.classList.remove('active'); }
+  else { state.colors.add(c); p.classList.add('active'); }
+  render();
+});
+
+load();
+</script>
+</body>
+</html>
