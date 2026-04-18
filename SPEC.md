@@ -1,4 +1,4 @@
-# RAPPcards Specification v1.1
+# RAPPcards Specification v1.1.1
 
 **Status:** Stable · **Last updated:** 2026-04-17 · **Authors:** Wildhaven / RAPP community
 
@@ -337,20 +337,69 @@ The **canonical peers list** lives at
 [`https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json`](https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json).
 New binders join the federation by PR'ing themselves in.
 
+##### Optional peers.json fields (v1.1.1)
+
+| Field                     | Level   | Purpose                                                            |
+|---------------------------|---------|--------------------------------------------------------------------|
+| `canonical`               | top     | `true` if this file **is** the canonical list                      |
+| `canonical_source`        | top     | URL of the canonical `peers.json` this file mirrors                |
+| `updated`                 | top     | ISO date string of last edit                                       |
+| `peers[].role`            | peer    | Role hint: `registry` · `twin` · `third-party` · `archive`         |
+| `peers[].cards_url`       | peer    | Raw URL of the peer's full card registry (convenience, optional)   |
+| `peers[].note`            | peer    | Human-readable description surfaced in UIs                         |
+
+**Role vocabulary** (non-exhaustive, case-insensitive):
+
+- `registry` — authoritative minting repository. Typically one per federation.
+- `twin` — publishes a seed-index that proxies another peer (usually the registry).
+- `third-party` — independent binder with its own original cards.
+- `archive` — historical binder; may be read-only or no longer accepting submissions.
+
+Unknown roles MUST be treated as `third-party` for UX purposes. Binders SHOULD NOT use the `role`
+field as a trust signal — it's a label, not an authorization claim.
+
+A peer file with `canonical: true` SHOULD be preferred when multiple copies are known. A peer file
+with `canonical_source` set SHOULD revalidate against that URL at load time if possible.
+
 #### Resolution algorithm
 
 When a binder receives an incantation or seed it doesn't own locally, it MUST:
 
 1. Convert the incantation to a seed via §3.2.
 2. Load its own `peers.json` (or the canonical list).
-3. For each peer, fetch the peer's `seed-index.json`. Look up the seed string.
-4. On first hit: fetch the pointer's `url`. If `url_is_bundle` is true, extract `bundle_key` from
-   the response. Otherwise parse the response as a single card.
-5. Display the card. Indicate its `source` binder to the user.
-6. If the user adds a foreign card to their binder, store it locally with `source` metadata.
+3. For each peer, **skip entries whose `binder` equals the resolver's own `binder` identity** — a
+   binder never walks its own seed-index. This prevents self-recursion and redundant I/O.
+4. For each remaining peer, fetch the peer's `seed-index.json`. Look up the seed string.
+5. On first hit: fetch the pointer's `url`. If `url_is_bundle` is true, parse the response as a
+   registry (top-level `cards` map or bare map) and extract the card at `bundle_key`. Otherwise
+   parse the response as a single card object.
+6. **Normalize the foreign card into the resolver's local shape.** Binders differ in field naming
+   conventions (`agent_types` vs `types`, `rarity_tier` vs `rarity`, BigInt vs string seeds, etc.).
+   The resolver SHOULD coerce fields it recognizes and leave unknown fields untouched. See §5.4.1.
+7. Display the card. The resolver SHOULD surface the `binder` name of the source peer to the user
+   (e.g. "Federated from `red-binder`") so provenance is never hidden.
+8. If the user adds a foreign card to their binder, store it locally with source metadata
+   (`_foreign_binder`, `_foreign_id`, or equivalent) so it round-trips through export/import.
 
 A binder MAY cache seed-index responses for up to 15 minutes. A binder MUST NOT cache them longer
 than 24 hours without revalidation.
+
+##### §5.4.1 Foreign-card normalization (recommended)
+
+Binders SHOULD coerce a foreign card's fields using this mapping on ingestion, preserving all
+original fields in the stored object:
+
+| From (foreign)                   | To (local convention)          |
+|----------------------------------|--------------------------------|
+| `agent_types` (array)            | `types`                        |
+| `rarity_tier` (string)           | `rarity`                       |
+| `seed` (string if > 2⁵³)         | `seed` (BigInt in JS)          |
+| `typed_abilities`                | `abilities`                    |
+| `type_line` (string)             | kept verbatim                  |
+
+Binders MUST NOT mutate a foreign card's `seed` value, `id`, `avatar_svg`, or ability effects —
+these are the content-addressed core. Only naming conventions may be remapped, and the original
+fields SHOULD remain intact alongside their mapped equivalents.
 
 #### Why this works
 
@@ -437,6 +486,22 @@ everything else.
   `https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json`. A binder can now resolve
   any seed from any federated binder via static raw-URL lookups. Fully backward compatible: v1.0
   binders remain conformant, they simply won't resolve foreign seeds.
+- **v1.1.1 (2026-04-17)** — Clarifications to §5.4 based on real-world multi-binder deployment
+  (RAR + RAPPcards + red-binder):
+  - Documents optional `peers.json` fields: `canonical`, `canonical_source`, `updated`,
+    `peers[].role`, `peers[].cards_url`, `peers[].note`.
+  - Defines a non-exhaustive role vocabulary (`registry`, `twin`, `third-party`, `archive`) and
+    states roles are labels, not trust signals.
+  - Adds explicit walker self-skip rule (a binder never walks its own seed-index).
+  - Adds §5.4.1 foreign-card normalization table (`agent_types → types`, `rarity_tier → rarity`,
+    BigInt seed handling) with a `MUST NOT` on mutating content-addressed fields.
+  - Strengthens provenance language: resolvers SHOULD surface the source binder name to the user.
+  - No wire-format changes; any v1.1 binder is already v1.1.1 compliant.
+- **v1.1 (2026-04-17)** — Adds §5.4 **Federated seed resolution**. Defines `seed-index.json` and
+  `peers.json` schemas. Establishes the canonical peers list at
+  `https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json`. A binder can now resolve
+  any seed from any federated binder via static raw-URL lookups. Fully backward compatible: v1.0
+  binders remain conformant, they simply won't resolve foreign seeds.
 - **v1.0 (2026-04-17)** — Initial public spec. Freezes wordlist, card schema, hash protocol, export
   envelope. Supersedes all prior informal conventions.
 
@@ -444,7 +509,7 @@ everything else.
 
 ## Appendix A — Minimal conformance checklist
 
-A binder is **RAPPcards-compatible v1.1** if and only if it:
+A binder is **RAPPcards-compatible v1.1.1** if and only if it:
 
 - [ ] Parses cards matching §2's data model, including `seed` as BigInt/string.
 - [ ] Ships the authoritative 1024-word mnemonic (§3.2).
@@ -452,10 +517,13 @@ A binder is **RAPPcards-compatible v1.1** if and only if it:
 - [ ] Responds to the URL hash protocol in §5.1 (at minimum `#add`, `#seed`, `#incant`).
 - [ ] Exports/imports the envelope in §5.2 with zero loss.
 - [ ] Publishes a `seed-index.json` per §5.4 and resolves foreign seeds by walking `peers.json`.
+- [ ] Skips its own entry when walking peers (§5.4 step 3).
+- [ ] Surfaces the source `binder` name for any card displayed via federation (§5.4 step 7).
 - [ ] Sanitizes SVG avatars (§7).
-- [ ] Advertises `rappcards-spec` version (§8).
+- [ ] Advertises `rappcards-spec` version (§8) — current value `1.1.1` or higher.
 
-A binder is **RAPPcards-compatible v1.0** (legacy) if it meets all bullets above except §5.4.
+A binder is **RAPPcards-compatible v1.0** (legacy) if it meets all bullets above except the four
+federation-related items.
 
 Everything else is UX.
 
