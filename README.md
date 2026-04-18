@@ -1,36 +1,54 @@
 # RAPPcards
 
-**Digital twin of the [RAR](https://github.com/kody-w/RAR) card collection** — 138 single-file AI agents rendered as MTG-style cards, fetched live from the registry on every page load.
+**The digital twin of the [RAPP Agent Registry (RAR)](https://kody-w.github.io/RAR) card collection.**
 
-**Live:** [https://kody-w.github.io/RAPPcards/](https://kody-w.github.io/RAPPcards/)
+Live at **[kody-w.github.io/RAPPcards](https://kody-w.github.io/RAPPcards/)**.
 
-## What this is
+138 single-file AI agents rendered as Pokémon-style cards, pulled live from
+`raw.githubusercontent.com/kody-w/RAR/main/` on every page load. No fork, no copy,
+no build step — the twin reflects whatever RAR currently says.
 
-A zero-dependency, single-file static site that reflects the real state of the [RAPP Agent Registry](https://kody-w.github.io/RAR). No build step. No backend. The page fetches:
+## Full compatibility with RAR
 
-- `cards/holo_cards.json` — card visuals (name, mana cost, type, abilities, flavor, inline SVG art)
-- `registry.json` — agent metadata (publisher, version, category, quality tier, seed, file path, line count)
+- **Visual parity.** Cards render with the exact same layout, colors, stats (HP / ATK / DEF /
+  SPD / INT), type badges, rarity tiers (Starter / Core / Elite / Legendary), and weakness /
+  resistance chart as `binder.html` in the RAR repo.
+- **Authoritative incantation.** The 1024-word `MNEMONIC_WORDS` list from `rapp_sdk.py` is
+  embedded verbatim. 10 bits × 7 words = 70 bits covers the 64-bit seed losslessly.
+  Every displayed incantation round-trips exactly through `wordsToSeed` ↔ `seedToWords`.
+- **BigInt seeds.** 64-bit seeds (`seed > 2⁵³`) are parsed from raw JSON text as BigInts to
+  avoid floating-point precision loss — identical to the SDK's behavior.
+- **Download as `*_agent.py`.** One click downloads the raw source from RAR, or scaffolds a
+  fresh spec-compliant single-file agent with a pre-filled `__manifest__`.
+- **Summon by incantation.** Speak any 7-word incantation → resolve to card (if registered)
+  or to a raw seed (if unclaimed, with a mint link).
 
-...both directly from `raw.githubusercontent.com/kody-w/RAR/main/` on load. When RAR updates, this twin updates on the next refresh.
+## The twin doctrine
+
+> **RAPPcards are self-sufficient. RAR is the optional central mint.**
+
+The cards here **work without RAR**. Download a `*_agent.py`, drop it in your project, run
+it — the file conforms to the [RAPP v1 SPEC](https://kody-w.github.io/RAPP/SPEC.md) and
+runs anywhere the RAPP runtime does. RAR is only required when you want a card *canonical*:
+publicly listed, verified, searchable, collectible, minted with a seed that belongs to you.
+
+- The **agent contract** lives in RAPP: `BasicAgent` + `name` + `metadata` + `perform()`.
+- The **registry contract** lives in RAR: `__manifest__`, publisher namespace, schema
+  validation, submission pipeline, seed allocation.
+
+RAPPcards honors both. You can browse, download, and fork cards with no RAR interaction.
+Or you can click "✨ Mint new card to RAR" and submit one through the registry's pipeline.
 
 ## Not a fork
 
-This is the **experiential twin** — the contractual truth lives at [kody-w/RAR](https://github.com/kody-w/RAR). If the twin and RAR disagree, RAR wins. The SDK, the validators, the submission pipeline, the seed→incantation mapping — all of that is and remains in RAR proper.
-
-## What you can do here
-
-- 🔍 **Search** across 138 cards by name, ability, publisher, flavor text, or tag
-- 🎨 **Filter** by rarity, color (R/W/U/B/G/N), category, or publisher
-- 📇 **Click** any card for full details: abilities, flavor, stats, seed, and links back to the source `.py` on GitHub
-- 🔗 **Jump** to the card's entry in the RAR binder or view the raw agent source
+This repo contains only `index.html` + `README.md`. All card data is fetched live from
+`kody-w/RAR`. The contractual truth — SDK, validators, submission pipeline, seed→incantation
+wordlist — remains in RAR. We copy the wordlist for offline encoding only; the registry
+remains the source of truth for what a canonical card *is*.
 
 ## Related
 
-- [RAR](https://kody-w.github.io/RAR) — the registry itself
-- [RAPP Stack](https://kody-w.com) — Brainstem → Hippocampus → Copilot Studio
-- [RAPP v1 SPEC](https://kody-w.github.io/RAPP/SPEC.md) — the contract
-- [Single File Agents doctrine](https://kody-w.github.io/rappterhub/single-file-agents.html) — the philosophy
-
-## License
-
-The twin code in this repo is MIT. Card data is pulled live from kody-w/RAR and is governed by RAR's terms.
+- [RAR registry](https://kody-w.github.io/RAR) · 138 agents, 7 publishers, 19 categories
+- [RAPP stack](https://kody-w.com) · brainstem → hippocampus → Copilot Studio
+- [RAPP v1 SPEC](https://kody-w.github.io/RAPP/SPEC.md) · the agent contract
+- [rapp-installer](https://github.com/kody-w/rapp-installer) · Copilot Studio harness
