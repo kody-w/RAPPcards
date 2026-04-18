@@ -8,6 +8,28 @@ Live at **[kody-w.github.io/RAPPcards](https://kody-w.github.io/RAPPcards/)**.
 `raw.githubusercontent.com/kody-w/RAR/main/` on every page load. No fork, no copy,
 no build step — the twin reflects whatever RAR currently says.
 
+## Pages
+
+| Page | Purpose |
+|------|---------|
+| [`index.html`](https://kody-w.github.io/RAPPcards/) | Browse all 138 cards. Filter by type, rarity, publisher. |
+| [`binder.html`](https://kody-w.github.io/RAPPcards/binder.html) | **Personal collection.** Local-first IndexedDB. Summon by incantation. Import / export. Cross-binder interop. |
+| [`SPEC.md`](./SPEC.md) | **The universal RAPPcards specification v1.0** — the open standard any binder can implement. |
+
+## Cross-binder summoning
+
+RAPPcards and RAR speak the same 7-word incantation language. A card minted in RAR can be
+summoned into the RAPPcards binder by speaking its words. A card picked up in RAPPcards can be
+handed off to RAR the same way. The seed is the true name — binders are just views.
+
+Share links encode the handoff in the URL hash:
+
+- `binder.html#add=@kody-w/forge-master` — auto-summon a specific card by ID
+- `binder.html#seed=4997715477691771520` — auto-summon by 64-bit seed
+- `binder.html#incant=FORGE+ANVIL+BLADE+RUNE+SHARD+SMELT+TEMPER` — auto-summon by incantation
+
+Any conforming binder (see [SPEC.md §5.1](./SPEC.md)) handles these hashes on load.
+
 ## Full compatibility with RAR
 
 - **Visual parity.** Cards render with the exact same layout, colors, stats (HP / ATK / DEF /
