@@ -1,4 +1,4 @@
-# RAPPcards Specification v1.0
+# RAPPcards Specification v1.1
 
 **Status:** Stable · **Last updated:** 2026-04-17 · **Authors:** Wildhaven / RAPP community
 
@@ -261,6 +261,108 @@ JS `JSON.parse` loses precision on integers > 2⁵³. Conforming JS binders SHOU
 
 Python binders have no such limitation.
 
+### §5.4 Federated seed resolution (v1.1, required)
+
+**The whole point of RAPPcards: speak the incantation in any binder, and the card appears.**
+
+A binder MUST be able to resolve a seed it doesn't own by walking the federation. A binder MUST
+publish a `seed-index.json` at a stable raw URL (typically
+`https://raw.githubusercontent.com/<owner>/<repo>/main/seed-index.json`) with the following shape:
+
+```json
+{
+  "schema":    "rappcards-seed-index/1.0",
+  "binder":    "my-binder",
+  "homepage":  "https://example.github.io/my-binder/",
+  "cards_url": "https://raw.githubusercontent.com/ex/my-binder/main/cards.json",
+  "count":     42,
+  "seeds": {
+    "4997715477691771520": {
+      "id":           "@ex/forge-master",
+      "name":         "Forge Master",
+      "rarity_tier":  "mythic",
+      "url":          "https://raw.githubusercontent.com/ex/my-binder/main/cards/forge-master.json",
+      "binder":       "my-binder"
+    }
+  },
+  "ids": {                                  // optional — same entries keyed by id
+    "@ex/forge-master": { ... }
+  }
+}
+```
+
+Each entry maps a seed (decimal string) to a pointer to the **full card JSON** at a
+raw-content URL. The pointer fields:
+
+| Field           | Required | Purpose                                                          |
+|-----------------|----------|------------------------------------------------------------------|
+| `id`            | ✱        | Canonical `@publisher/slug`                                     |
+| `url`           | ✱        | Raw URL to the card JSON (or to a bundle; see `url_is_bundle`)  |
+| `name`          |          | Display name for lightweight listings                           |
+| `rarity_tier`   |          | For sorting/badges without fetching                             |
+| `binder`        |          | Owning binder name                                              |
+| `url_is_bundle` |          | If `true`, `url` points at a multi-card registry; see below     |
+| `bundle_key`    |          | Key to look up inside the bundle (typically same as `id`)       |
+
+**Bundle handling.** If `url_is_bundle` is `true`, the binder fetches the URL, parses the result,
+expects a top-level `cards` object (or bare map), and looks up `bundle_key` to extract the card.
+Otherwise the URL returns the single card JSON directly.
+
+#### Peer discovery: `peers.json`
+
+Each binder MAY publish a `peers.json` at a stable raw URL declaring the federation it recognizes:
+
+```json
+{
+  "schema":  "rappcards-peers/1.0",
+  "updated": "2026-04-17",
+  "peers": [
+    {
+      "binder":     "rar",
+      "homepage":   "https://kody-w.github.io/RAR/",
+      "seed_index": "https://raw.githubusercontent.com/kody-w/RAPPcards/main/seed-index.json",
+      "role":       "registry"
+    },
+    {
+      "binder":     "red-binder",
+      "homepage":   "https://kody-w.github.io/red-binder/",
+      "seed_index": "https://raw.githubusercontent.com/kody-w/red-binder/main/seed-index.json",
+      "role":       "third-party"
+    }
+  ]
+}
+```
+
+The **canonical peers list** lives at
+[`https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json`](https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json).
+New binders join the federation by PR'ing themselves in.
+
+#### Resolution algorithm
+
+When a binder receives an incantation or seed it doesn't own locally, it MUST:
+
+1. Convert the incantation to a seed via §3.2.
+2. Load its own `peers.json` (or the canonical list).
+3. For each peer, fetch the peer's `seed-index.json`. Look up the seed string.
+4. On first hit: fetch the pointer's `url`. If `url_is_bundle` is true, extract `bundle_key` from
+   the response. Otherwise parse the response as a single card.
+5. Display the card. Indicate its `source` binder to the user.
+6. If the user adds a foreign card to their binder, store it locally with `source` metadata.
+
+A binder MAY cache seed-index responses for up to 15 minutes. A binder MUST NOT cache them longer
+than 24 hours without revalidation.
+
+#### Why this works
+
+- **No coordination.** Adding a new binder is a git PR, not a protocol negotiation.
+- **Static JSON only.** Everything rides on `raw.githubusercontent.com`. No servers, no APIs.
+- **Content-addressed.** The seed is BLAKE2b of the agent — two binders cannot claim the same
+  seed without bit-identical agent source. Forgery is cryptographically prevented.
+- **Federation is optional.** A binder that wants to be an island can simply not implement §5.4
+  — it's still SPEC v1.0 compliant and can live alone.
+
+The incantation is the universal URL. 7 words. Any binder. Any time.
+
 ---
 
 ## §6. Trust, minting, and registry
@@ -330,6 +432,11 @@ everything else.
 
 ## §10. Change log
 
+- **v1.1 (2026-04-17)** — Adds §5.4 **Federated seed resolution**. Defines `seed-index.json` and
+  `peers.json` schemas. Establishes the canonical peers list at
+  `https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json`. A binder can now resolve
+  any seed from any federated binder via static raw-URL lookups. Fully backward compatible: v1.0
+  binders remain conformant, they simply won't resolve foreign seeds.
 - **v1.0 (2026-04-17)** — Initial public spec. Freezes wordlist, card schema, hash protocol, export
   envelope. Supersedes all prior informal conventions.
 
@@ -337,15 +444,18 @@ everything else.
 
 ## Appendix A — Minimal conformance checklist
 
-A binder is **RAPPcards-compatible v1.0** if and only if it:
+A binder is **RAPPcards-compatible v1.1** if and only if it:
 
 - [ ] Parses cards matching §2's data model, including `seed` as BigInt/string.
 - [ ] Ships the authoritative 1024-word mnemonic (§3.2).
 - [ ] Encodes and decodes 7-word incantations per §3.2.
 - [ ] Responds to the URL hash protocol in §5.1 (at minimum `#add`, `#seed`, `#incant`).
 - [ ] Exports/imports the envelope in §5.2 with zero loss.
+- [ ] Publishes a `seed-index.json` per §5.4 and resolves foreign seeds by walking `peers.json`.
 - [ ] Sanitizes SVG avatars (§7).
 - [ ] Advertises `rappcards-spec` version (§8).
+
+A binder is **RAPPcards-compatible v1.0** (legacy) if it meets all bullets above except §5.4.
 
 Everything else is UX.
 

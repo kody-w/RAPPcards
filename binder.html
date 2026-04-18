@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>RAPPcards Binder — your personal card collection</title>
+<meta name="rappcards-spec" content="1.1">
+<meta name="rappcards-binder" content="rappcards">
+<meta name="rappcards-federation" content="https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json">
 <meta name="description" content="Local-first personal binder for RAPPcards. Collect, browse, summon, import/export. Mirrors the RAR binder, styled for RAPPcards. Works offline.">
 <meta name="theme-color" content="#0d1117">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -709,18 +712,114 @@ async function removeFromBinder(id){
   closeModal();
 }
 
+/* ─── SPEC §5.4 Federation ─── */
+const CANONICAL_PEERS_URL = 'https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json';
+let _peersCache = null, _indexCache = new Map();
+async function loadPeers(){
+  if (_peersCache) return _peersCache;
+  try {
+    const r = await fetch(CANONICAL_PEERS_URL, {cache:'no-cache'});
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    _peersCache = j.peers || [];
+  } catch (e) { _peersCache = []; }
+  return _peersCache;
+}
+async function fetchSeedIndex(url){
+  if (_indexCache.has(url)) return _indexCache.get(url);
+  try {
+    const r = await fetch(url, {cache:'no-cache'});
+    if (!r.ok) throw 0;
+    const j = await r.json();
+    _indexCache.set(url, j);
+    return j;
+  } catch (e) { _indexCache.set(url, null); return null; }
+}
+async function resolveSeedGlobal(seed){
+  const seedStr = seed.toString();
+  // local first
+  const localId = state.seedToId.get(seedStr);
+  if (localId) return { local:true, id:localId };
+  // walk peers
+  const peers = await loadPeers();
+  for (const peer of peers){
+    if (!peer.seed_index || peer.binder === 'rappcards') continue;
+    const idx = await fetchSeedIndex(peer.seed_index);
+    if (!idx || !idx.seeds) continue;
+    const entry = idx.seeds[seedStr];
+    if (!entry) continue;
+    // fetch the card
+    try {
+      const r = await fetch(entry.url, {cache:'no-cache'});
+      if (!r.ok) continue;
+      let txt = await r.text();
+      txt = txt.replace(/("seed"\s*:\s*)(-?\d{10,})/g, '$1"$2"');
+      const blob = JSON.parse(txt);
+      let card;
+      if (entry.url_is_bundle || blob.cards){
+        const key = entry.bundle_key || entry.id;
+        card = (blob.cards && blob.cards[key]) || blob[key];
+      } else {
+        card = blob;
+      }
+      if (!card) continue;
+      if (typeof card.seed === 'string') card.seed = BigInt(card.seed);
+      return { foreign:true, peer, entry, card };
+    } catch (e) { continue; }
+  }
+  return null;
+}
+function showForeignCard(card, peer, entry){
+  const types = card.agent_types || [];
+  const stats = card.stats || {};
+  const abilities = card.typed_abilities || card.abilities || [];
+  const rarity = card.rarity_tier || card.rarity || 'core';
+  const seed = card.seed;
+  const seedStr = (typeof seed==='bigint') ? seed.toString() : String(seed||'');
+  const incant = (typeof seed==='bigint') ? seedToWords(seed) : '—';
+  const peerHome = peer.homepage || '#';
+  $('#modal').innerHTML = `
+    <button class="modal-close" aria-label="Close">&times;</button>
+    <h2>${esc(card.name||entry.id)}<span class="hp">HP ${esc(String(card.hp??stats.hp??'?'))}</span></h2>
+    <div class="type-line">${esc((types.map(t=>TYPES[t]?.label||t).join(' / '))+' Agent')} &mdash; <strong>Federated from <code>${esc(peer.binder)}</code></strong></div>
+    <div class="art">${safeSVG(card.avatar_svg)}</div>
+    <div class="type-row">${types.map(typeBadge).join('')}</div>
+    <div class="flavor">${esc(card.flavor_text||'')}</div>
+    ${abilities.length ? '<div class="abilities">'+abilities.map(a=>`
+      <div class="ability"><div class="aname">${esc(a.name||a.keyword||'Ability')}</div>
+      <div class="atext">${esc(a.text||a.effect||'')}</div></div>`).join('')+'</div>' : ''}
+    <div class="incant-box"><div class="ilab">Incantation</div><div class="iwords">${esc(incant)}</div></div>
+    <div class="incant-box"><div class="ilab">Seed</div><div class="iwords">${esc(seedStr)}</div></div>
+    <div class="flavor" style="background:#1a0f1f;border-color:#4a2660">
+      <strong>Cross-binder summon.</strong> This card lives in <a href="${esc(peerHome)}" target="_blank" rel="noopener"><code>${esc(peer.binder)}</code> ↗</a>.
+      The RAPPcards binder resolved it via the federation (SPEC §5.4).
+    </div>
+    <div class="actions">
+      <a class="mint" href="${esc(peerHome)}binder.html#incant=${encodeURIComponent(incant.replace(/\s+/g,'+'))}" target="_blank" rel="noopener">Open in ${esc(peer.binder)} binder ↗</a>
+      <button data-copy-incant>📋 Copy incantation</button>
+      <button data-close>Close</button>
+    </div>`;
+  $('#modalBg').classList.add('open'); document.body.style.overflow='hidden';
+  $('#modal .modal-close').addEventListener('click', closeModal);
+  $('#modal [data-close]').addEventListener('click', closeModal);
+  $('#modal [data-copy-incant]').addEventListener('click', ()=>copyText(incant,'Incantation copied'));
+}
+
 /* ─── Summon ─── */
-function summonByIncantation(){
+async function summonByIncantation(){
   const raw = $('#incant').value.trim();
   if (!raw){ toast('Enter 7 words','err'); return; }
   try {
     const seed = wordsToSeed(raw);
     const id = state.seedToId.get(seed.toString());
     if (id){ openModal(id); toast(`Summoned ${id}`,'ok'); return; }
+    toast('Walking federation…','ok');
+    const hit = await resolveSeedGlobal(seed);
+    if (hit && hit.foreign){ showForeignCard(hit.card, hit.peer, hit.entry); toast(`Federated from ${hit.peer.binder}`,'ok'); return; }
     showUnregistered(seed, raw.toUpperCase());
   } catch (e) { toast(String(e.message||e),'err'); }
 }
-function decodeSeedNumber(){
+async function decodeSeedNumber(){
   const raw = $('#seedNum').value.trim(); if(!raw){toast('Enter a seed','err');return;}
   try {
     let seed;
@@ -729,6 +828,9 @@ function decodeSeedNumber(){
     else throw new Error('Not a valid number (decimal or 0x hex)');
     const id = state.seedToId.get(seed.toString());
     if (id){ openModal(id); toast(`Matched ${id}`,'ok'); return; }
+    toast('Walking federation…','ok');
+    const hit = await resolveSeedGlobal(seed);
+    if (hit && hit.foreign){ showForeignCard(hit.card, hit.peer, hit.entry); toast(`Federated from ${hit.peer.binder}`,'ok'); return; }
     showUnregistered(seed, seedToWords(seed));
   } catch (e) { toast(String(e.message||e),'err'); }
 }
@@ -906,7 +1008,10 @@ async function handleIncomingSummon(req){
       switchTab('summon');
       $('#incant').value = incant || '';
       $('#seedNum').value = seed.toString();
-      showUnregistered(seed, incant);
+      toast('Walking federation…','ok');
+      const hit = await resolveSeedGlobal(seed);
+      if (hit && hit.foreign){ showForeignCard(hit.card, hit.peer, hit.entry); toast(`Federated from ${hit.peer.binder}`,'ok'); }
+      else showUnregistered(seed, incant);
     }
     // Clean hash so reload doesn't re-trigger
     history.replaceState(null,'',location.pathname);
