@@ -480,7 +480,13 @@ equivalent.
 | Canonical binder     | `kody-w/RAR`                        | `binder.html`                    |
 | Local-first binder   | `kody-w/RAPPcards`                  | `binder.html`                    |
 | Card index view      | `kody-w/RAPPcards`                  | `index.html`                     |
+| Third-party binder   | `kody-w/red-binder`                 | `binder.html`                    |
+| Rebuild-from-memory  | `kody-w/twin-binder`                | `binder.html`                    |
 | Submission pipeline  | `kody-w/RAR`                        | `submit.html` + CI               |
+
+The `twin-binder` ships empty — a pure view over the federation — and demonstrates
+Appendix B (a user holding a list of incantations reconstructs their collection by
+speaking them into any empty v1.1.2+ binder).
 
 All implementations MUST be reproducible from this document alone. Where this document and
 `rapp_sdk.py` disagree, `rapp_sdk.py` wins for seed/mnemonic semantics, and this document wins for
