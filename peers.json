@@ -1,6 +1,6 @@
 {
   "schema": "rappcards-peers/1.0",
-  "updated": "2026-04-17",
+  "updated": "2026-04-18",
   "canonical": true,
   "note": "The canonical RAPPcards federation registry. New binders: PR to add yourself. All SPEC v1.1 binders should load this file as the bootstrap peers list.",
   "peers": [
@@ -33,6 +33,13 @@
       "seed_index": "https://raw.githubusercontent.com/kody-w/twin-binder/main/seed-index.json",
       "role": "archive",
       "note": "Empty view binder. Owns no cards \u2014 exists purely to demonstrate the v1.1.2 rebuild-from-memory guarantee."
+    },
+    {
+      "binder": "obsidian-binder",
+      "homepage": "https://github.com/kody-w/obsidian-binder",
+      "seed_index": "https://raw.githubusercontent.com/kody-w/obsidian-binder/main/seed-index.json",
+      "role": "vault",
+      "note": "Karpathy-style second brain. Cards are markdown notes with YAML frontmatter; a build script generates the JSON sidecars. The vault IS the binder."
     }
   ]
 }
