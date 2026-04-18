@@ -503,7 +503,8 @@ function updateCounts(){
 function typeBadge(t){ const i=TYPES[t]||{color:'#888',label:t};
   return `<span class="type-badge" style="background:${i.color}22;color:${i.color};border:1px solid ${i.color}44">${esc(i.label)}</span>`; }
 
-function cardHTML({id,card,meta}, ownedFlag){
+function cardHTML(entry, ownedFlag){
+  const {id,card,meta,foreign,foreign_binder} = entry;
   const types = card.agent_types || [];
   const stats = card.stats || {};
   const abilities = card.typed_abilities || card.abilities || [];
@@ -513,9 +514,10 @@ function cardHTML({id,card,meta}, ownedFlag){
   const seed = card.seed;
   const seedHex = (typeof seed==='bigint') ? '#'+seed.toString(16).toUpperCase().slice(0,12) : '';
   const title = card.title ? `<span class="title">${esc(card.title)}</span>` : '';
-  return `<article class="card${ownedFlag?' owned':''}" data-id="${esc(id)}">
+  const fbadge = foreign ? `<span class="card-foreign" title="Federated from ${esc(foreign_binder)}" style="font-size:10px;background:#3d1f5c;color:#d4a5ff;padding:2px 6px;border-radius:3px;margin-left:4px">🌐 ${esc(foreign_binder)}</span>` : '';
+  return `<article class="card${ownedFlag?' owned':''}${foreign?' foreign':''}" data-id="${esc(id)}"${foreign?' data-foreign="1"':''}>
     <div class="card-top">
-      <span class="card-name">${esc(card.name||id)}${title}</span>
+      <span class="card-name">${esc(card.name||id)}${title}${fbadge}</span>
       <span class="card-hp">HP ${esc(String(hp))}</span>
     </div>
     <div class="card-art">${safeSVG(card.avatar_svg)||'<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#21262d"/></svg>'}</div>
@@ -539,20 +541,46 @@ function cardHTML({id,card,meta}, ownedFlag){
 
 function bindCardClicks(root){
   [...root.querySelectorAll('.card[data-id]')].forEach(el=>{
-    el.addEventListener('click', ()=>openModal(el.dataset.id));
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.id;
+      if (el.dataset.foreign === '1'){
+        const stored = state.owned.get(id);
+        if (stored && stored.card){
+          const card = {...stored.card, seed: (typeof stored.card.seed==='string' ? BigInt(stored.card.seed) : stored.card.seed)};
+          const peer = { binder: stored._foreign_binder, homepage: stored._foreign_home || '#' };
+          const entry = { id: stored._foreign_id || stored.id, name: stored.name, rarity_tier: card.rarity_tier, url: stored._foreign_url };
+          showForeignCard(card, peer, entry);
+        }
+      } else {
+        openModal(id);
+      }
+    });
   });
 }
 
 /* ─── Collection render ─── */
 function renderCollection(){
-  const owned = [...state.owned.keys()].map(id=>state.all.find(x=>x.id===id)).filter(Boolean);
+  const owned = [...state.owned.values()].map(e=>{
+    // Native cards live in state.all; foreign cards carry their data inline.
+    if (e.foreign && e.card){
+      return {
+        id: e._binder_key,
+        card: {...e.card, seed: (typeof e.card.seed === 'string' ? BigInt(e.card.seed) : e.card.seed)},
+        meta: e.meta || {},
+        foreign: true,
+        foreign_binder: e._foreign_binder,
+      };
+    }
+    const native = state.all.find(x=>x.id===e._binder_key || x.id===e.id);
+    return native;
+  }).filter(Boolean);
   let filtered = owned;
   if (state.crarity) filtered = filtered.filter(x=>(x.card.rarity_tier||x.card.rarity)===state.crarity);
   if (state.ctype)   filtered = filtered.filter(x=>(x.card.agent_types||[]).includes(state.ctype));
   if (state.cq){
     const q = state.cq.toLowerCase();
     filtered = filtered.filter(({id,card,meta})=>{
-      const hay = [id,card.name,card.title,card.flavor_text,meta.description,(meta.tags||[]).join(' ')].join(' ').toLowerCase();
+      const hay = [id,card.name,card.title,card.flavor_text,(meta&&meta.description)||'',((meta&&meta.tags)||[]).join(' ')].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }
@@ -769,6 +797,33 @@ async function resolveSeedGlobal(seed){
   }
   return null;
 }
+async function saveForeignCard(card, peer, entry){
+  const seed = card.seed;
+  const seedStr = (typeof seed==='bigint') ? seed.toString() : String(seed||'');
+  const stored = {
+    _binder_key: `${peer.binder}:${entry.id}`,
+    _added_at: new Date().toISOString(),
+    _foreign_binder: peer.binder,
+    _foreign_home: peer.homepage,
+    _foreign_id: entry.id,
+    _foreign_url: entry.url,
+    id: entry.id,
+    name: card.name || entry.name || entry.id,
+    seed_str: seedStr,
+    foreign: true,
+    card: JSON.parse(JSON.stringify(card, (k,v)=> typeof v==='bigint' ? String(v) : v)),
+    meta: {
+      version: card.version || '1.0',
+      category: entry.rarity_tier || card.rarity_tier || 'foreign',
+      quality_tier: card.rarity_tier || card.rarity || 'core',
+      author: peer.binder,
+    },
+  };
+  await dbPut(STORE, stored);
+  state.owned.set(stored._binder_key, stored);
+  updateCounts(); renderCollection(); renderBrowse();
+}
+
 function showForeignCard(card, peer, entry){
   const types = card.agent_types || [];
   const stats = card.stats || {};
@@ -778,6 +833,8 @@ function showForeignCard(card, peer, entry){
   const seedStr = (typeof seed==='bigint') ? seed.toString() : String(seed||'');
   const incant = (typeof seed==='bigint') ? seedToWords(seed) : '—';
   const peerHome = peer.homepage || '#';
+  const key = `${peer.binder}:${entry.id}`;
+  const owned = state.owned.has(key);
   $('#modal').innerHTML = `
     <button class="modal-close" aria-label="Close">&times;</button>
     <h2>${esc(card.name||entry.id)}<span class="hp">HP ${esc(String(card.hp??stats.hp??'?'))}</span></h2>
@@ -791,11 +848,15 @@ function showForeignCard(card, peer, entry){
     <div class="incant-box"><div class="ilab">Incantation</div><div class="iwords">${esc(incant)}</div></div>
     <div class="incant-box"><div class="ilab">Seed</div><div class="iwords">${esc(seedStr)}</div></div>
     <div class="flavor" style="background:#1a0f1f;border-color:#4a2660">
-      <strong>Cross-binder summon.</strong> This card lives in <a href="${esc(peerHome)}" target="_blank" rel="noopener"><code>${esc(peer.binder)}</code> ↗</a>.
-      The RAPPcards binder resolved it via the federation (SPEC §5.4).
+      <strong>Cross-binder summon${owned?' — already in your binder':' — saved to your binder'}.</strong>
+      This card lives in <a href="${esc(peerHome)}" target="_blank" rel="noopener"><code>${esc(peer.binder)}</code> ↗</a>.
+      Resolved via the federation (SPEC §5.4).
     </div>
     <div class="actions">
-      <a class="mint" href="${esc(peerHome)}binder.html#incant=${encodeURIComponent(incant.replace(/\s+/g,'+'))}" target="_blank" rel="noopener">Open in ${esc(peer.binder)} binder ↗</a>
+      ${owned
+        ? `<button class="mint" data-remove>🗑 Remove from binder</button>`
+        : `<span class="mint" style="opacity:.8">✓ Saved</span>`}
+      <a href="${esc(peerHome)}binder.html#incant=${encodeURIComponent(incant.replace(/\s+/g,'+'))}" target="_blank" rel="noopener">Open in ${esc(peer.binder)} ↗</a>
       <button data-copy-incant>📋 Copy incantation</button>
       <button data-close>Close</button>
     </div>`;
@@ -803,6 +864,11 @@ function showForeignCard(card, peer, entry){
   $('#modal .modal-close').addEventListener('click', closeModal);
   $('#modal [data-close]').addEventListener('click', closeModal);
   $('#modal [data-copy-incant]').addEventListener('click', ()=>copyText(incant,'Incantation copied'));
+  $('#modal [data-remove]')?.addEventListener('click', async ()=>{
+    await dbDelete(STORE, key); state.owned.delete(key);
+    updateCounts(); renderCollection(); renderBrowse();
+    toast('Removed from binder','ok'); closeModal();
+  });
 }
 
 /* ─── Summon ─── */
@@ -812,10 +878,21 @@ async function summonByIncantation(){
   try {
     const seed = wordsToSeed(raw);
     const id = state.seedToId.get(seed.toString());
-    if (id){ openModal(id); toast(`Summoned ${id}`,'ok'); return; }
+    if (id){
+      if (!state.owned.has(id)) await addToBinder(id);
+      openModal(id);
+      toast(`Summoned ${id}`,'ok');
+      return;
+    }
     toast('Walking federation…','ok');
     const hit = await resolveSeedGlobal(seed);
-    if (hit && hit.foreign){ showForeignCard(hit.card, hit.peer, hit.entry); toast(`Federated from ${hit.peer.binder}`,'ok'); return; }
+    if (hit && hit.foreign){
+      const key = `${hit.peer.binder}:${hit.entry.id}`;
+      if (!state.owned.has(key)) await saveForeignCard(hit.card, hit.peer, hit.entry);
+      showForeignCard(hit.card, hit.peer, hit.entry);
+      toast(`Saved from ${hit.peer.binder}`,'ok');
+      return;
+    }
     showUnregistered(seed, raw.toUpperCase());
   } catch (e) { toast(String(e.message||e),'err'); }
 }
@@ -827,10 +904,21 @@ async function decodeSeedNumber(){
     else if (/^-?\d+$/.test(raw)) seed = BigInt(raw);
     else throw new Error('Not a valid number (decimal or 0x hex)');
     const id = state.seedToId.get(seed.toString());
-    if (id){ openModal(id); toast(`Matched ${id}`,'ok'); return; }
+    if (id){
+      if (!state.owned.has(id)) await addToBinder(id);
+      openModal(id);
+      toast(`Matched ${id}`,'ok');
+      return;
+    }
     toast('Walking federation…','ok');
     const hit = await resolveSeedGlobal(seed);
-    if (hit && hit.foreign){ showForeignCard(hit.card, hit.peer, hit.entry); toast(`Federated from ${hit.peer.binder}`,'ok'); return; }
+    if (hit && hit.foreign){
+      const key = `${hit.peer.binder}:${hit.entry.id}`;
+      if (!state.owned.has(key)) await saveForeignCard(hit.card, hit.peer, hit.entry);
+      showForeignCard(hit.card, hit.peer, hit.entry);
+      toast(`Saved from ${hit.peer.binder}`,'ok');
+      return;
+    }
     showUnregistered(seed, seedToWords(seed));
   } catch (e) { toast(String(e.message||e),'err'); }
 }
@@ -1010,7 +1098,12 @@ async function handleIncomingSummon(req){
       $('#seedNum').value = seed.toString();
       toast('Walking federation…','ok');
       const hit = await resolveSeedGlobal(seed);
-      if (hit && hit.foreign){ showForeignCard(hit.card, hit.peer, hit.entry); toast(`Federated from ${hit.peer.binder}`,'ok'); }
+      if (hit && hit.foreign){
+        const key = `${hit.peer.binder}:${hit.entry.id}`;
+        if (!state.owned.has(key)) await saveForeignCard(hit.card, hit.peer, hit.entry);
+        showForeignCard(hit.card, hit.peer, hit.entry);
+        toast(`Saved from ${hit.peer.binder}`,'ok');
+      }
       else showUnregistered(seed, incant);
     }
     // Clean hash so reload doesn't re-trigger
