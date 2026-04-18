@@ -1,4 +1,4 @@
-# RAPPcards Specification v1.1.1
+# RAPPcards Specification v1.1.2
 
 **Status:** Stable · **Last updated:** 2026-04-17 · **Authors:** Wildhaven / RAPP community
 
@@ -378,8 +378,17 @@ When a binder receives an incantation or seed it doesn't own locally, it MUST:
    The resolver SHOULD coerce fields it recognizes and leave unknown fields untouched. See §5.4.1.
 7. Display the card. The resolver SHOULD surface the `binder` name of the source peer to the user
    (e.g. "Federated from `red-binder`") so provenance is never hidden.
-8. If the user adds a foreign card to their binder, store it locally with source metadata
-   (`_foreign_binder`, `_foreign_id`, or equivalent) so it round-trips through export/import.
+8. **Auto-persist on resolve (MANDATORY for v1.1.2+).** When a federation walk returns a hit,
+   the binder MUST store it locally with source metadata (`_foreign_binder`, `_foreign_home`,
+   `_foreign_id`, or equivalent) before rendering. Resolution is ownership. Separate
+   "Add to binder" UX is NOT permitted as a gate between resolving and owning.
+
+   Rationale: incantations are content-addressed 7-word mnemonics. A user who knows their
+   incantations MUST be able to reconstruct their entire collection by speaking them into any
+   empty compliant binder. See Appendix B.
+
+   Synthetic fallbacks (cards generated locally from a seed with no peer backing) MAY remain
+   unsaved — only registered or federated cards become owned.
 
 A binder MAY cache seed-index responses for up to 15 minutes. A binder MUST NOT cache them longer
 than 24 hours without revalidation.
@@ -486,6 +495,12 @@ everything else.
   `https://raw.githubusercontent.com/kody-w/RAPPcards/main/peers.json`. A binder can now resolve
   any seed from any federated binder via static raw-URL lookups. Fully backward compatible: v1.0
   binders remain conformant, they simply won't resolve foreign seeds.
+- **v1.1.2 (2026-04-17)** — **Mnemonic-as-ownership.** §5.4 step 8 upgraded from permissive
+  ("if the user adds…") to mandatory: binders MUST auto-persist foreign cards on successful
+  resolution. Resolution IS ownership. Adds Appendix B formalizing the rebuild-from-memory
+  guarantee: an empty v1.1.2+ binder, given a list of incantations, reconstructs to the same
+  owned state as the source binder. Wire format unchanged — this is a UX/storage contract
+  tightening. v1.1.1 binders that only display foreign cards are non-conformant under v1.1.2.
 - **v1.1.1 (2026-04-17)** — Clarifications to §5.4 based on real-world multi-binder deployment
   (RAR + RAPPcards + red-binder):
   - Documents optional `peers.json` fields: `canonical`, `canonical_source`, `updated`,
@@ -509,7 +524,7 @@ everything else.
 
 ## Appendix A — Minimal conformance checklist
 
-A binder is **RAPPcards-compatible v1.1.1** if and only if it:
+A binder is **RAPPcards-compatible v1.1.2** if and only if it:
 
 - [ ] Parses cards matching §2's data model, including `seed` as BigInt/string.
 - [ ] Ships the authoritative 1024-word mnemonic (§3.2).
@@ -519,13 +534,42 @@ A binder is **RAPPcards-compatible v1.1.1** if and only if it:
 - [ ] Publishes a `seed-index.json` per §5.4 and resolves foreign seeds by walking `peers.json`.
 - [ ] Skips its own entry when walking peers (§5.4 step 3).
 - [ ] Surfaces the source `binder` name for any card displayed via federation (§5.4 step 7).
+- [ ] **Auto-persists any card resolved via federation to local storage (§5.4 step 8).**
 - [ ] Sanitizes SVG avatars (§7).
-- [ ] Advertises `rappcards-spec` version (§8) — current value `1.1.1` or higher.
+- [ ] Advertises `rappcards-spec` version (§8) — current value `1.1.2` or higher.
 
-A binder is **RAPPcards-compatible v1.0** (legacy) if it meets all bullets above except the four
-federation-related items.
+A binder is **RAPPcards-compatible v1.0** (legacy) if it meets all bullets above except the
+federation and auto-persist items.
 
 Everything else is UX.
+
+---
+
+## Appendix B — Rebuildable binders (v1.1.2+)
+
+The fundamental guarantee of a v1.1.2+ binder:
+
+> A user who knows their incantations can reconstruct their entire collection by speaking them
+> into any empty compliant binder.
+
+Formally: let `I = {i₁, i₂, …, iₙ}` be a set of 7-word incantations owned by a user. Let `B₀`
+be any empty v1.1.2+ binder with access to the canonical `peers.json`. After the user enters
+each `iₖ ∈ I` into `B₀`, the resulting binder state `B′` MUST contain `n` owned cards, each
+resolvable to the same `(seed, canonical source, card contents)` tuple as in the user's
+original binder (modulo normalization per §5.4.1).
+
+This works because:
+
+1. Incantations are content-addressed (§3.2): `words ↔ seed` is a bijection.
+2. Seeds are content-addressed to canonical sources via `peers.json` federation (§5.4).
+3. Resolution is ownership (§5.4 step 8): every successful resolve writes to local storage.
+
+The binder is therefore a **view over the federation**, not a local database. The 7 words
+in the user's head are the canonical source of truth for what they own. Losing the binder
+is survivable. Forgetting the words is not.
+
+This is why §3.2 fixes the 1024-word mnemonic: any change to the wordlist would invalidate
+every incantation ever spoken. The mnemonic is permanent because ownership is permanent.
 
 ---
 
