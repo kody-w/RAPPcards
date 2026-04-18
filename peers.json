@@ -38,8 +38,8 @@
       "binder": "obsidian-binder",
       "homepage": "https://github.com/kody-w/obsidian-binder",
       "seed_index": "https://raw.githubusercontent.com/kody-w/obsidian-binder/main/seed-index.json",
-      "role": "vault",
-      "note": "Karpathy-style second brain. Cards are markdown notes with YAML frontmatter; a build script generates the JSON sidecars. The vault IS the binder."
+      "role": "third-party",
+      "note": "Standard SPEC v1.1.2 binder. Authored as an Obsidian vault for convenience; a build script generates the federation files. No protocol change."
     }
   ]
 }
