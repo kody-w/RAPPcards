@@ -1,5 +1,9 @@
 # RAPPcards
 
+<!-- rapp1:network-header:start -->
+[![RAPP/1](https://kody-w.github.io/rapp-hive-public/portfolio/badges/RAPPcards.svg)](https://github.com/kody-w/rapp-hive-public/blob/main/portfolio/repos/RAPPcards.md) · **New to RAPP?** [Start here: get your Brainstem →](https://github.com/kody-w/rapp-installer#start-here)
+<!-- rapp1:network-header:end -->
+
 **The digital twin of the [RAPP Agent Registry (RAR)](https://kody-w.github.io/RAR) card collection.**
 
 Live at **[kody-w.github.io/RAPPcards](https://kody-w.github.io/RAPPcards/)**.
