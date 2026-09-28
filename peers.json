@@ -1,6 +1,6 @@
 {
   "schema": "rappcards-peers/1.0",
-  "updated": "2026-04-18",
+  "updated": "2026-06-21",
   "canonical": true,
   "note": "The canonical RAPPcards federation registry. New binders: PR to add yourself. All SPEC v1.1 binders should load this file as the bootstrap peers list.",
   "peers": [
@@ -40,6 +40,14 @@
       "seed_index": "https://raw.githubusercontent.com/kody-w/obsidian-binder/main/seed-index.json",
       "role": "third-party",
       "note": "Standard SPEC v1.1.2 binder. Authored as an Obsidian vault for convenience; a build script generates the federation files. No protocol change."
+    },
+    {
+      "binder": "double-jump",
+      "homepage": "https://kody-w.github.io/double-jump/pokedex.html",
+      "seed_index": "https://raw.githubusercontent.com/kody-w/double-jump/main/seed-index.json",
+      "cards_url": "https://raw.githubusercontent.com/kody-w/double-jump/main/cards.json",
+      "role": "third-party",
+      "note": "Holocards minted from living holograms \u2014 each card's art IS the live walkable Moment. Built by the double-jump improvement harness."
     }
   ]
 }
